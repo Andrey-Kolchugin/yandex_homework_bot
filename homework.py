@@ -57,6 +57,8 @@ def get_api_answer(current_timestamp):
                 f'Ошибка коннекта к эндпоинту {ENDPOINT}'
                 f'загововок={HEADERS} params={params}'
             ) from error
+    if isinstance(response, dict):
+        raise TypeError('Ошибка ответа, тип объекта !=dict')
     else:
         return response.json()
 
@@ -64,21 +66,20 @@ def get_api_answer(current_timestamp):
 def check_response(response):
     """Проверяет ответ API на корректность."""
     logger.debug('Начинаем прверку ответа на соответствие API')
-    if not isinstance(response, dict):
-        raise TypeError('Ошибка ответа, тип объекта !=dict')
     try:
         homework = response['homeworks']
     except KeyError as error:
         raise KeyError('В ответе отсутствует ключ homeworks') from error
     if response.get('current_date') is None:
         raise KeyError('В ответе отсутствует ключ current_date')
-    if not homework:
-        raise KeyError('Отсутствует список домашек')
     if len(homework) == 0:
         raise exceptions.EmptyWorkListError('Задания на ревью не отправлялись')
     if not isinstance(homework, list):
         raise TypeError('Ошибка формата вывода домашек')
-    return homework
+    if not homework:
+        return
+    else:
+        return homework
 
 
 def parse_status(homework):
@@ -99,31 +100,41 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    return all(PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
+    token_list = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
+    return all(token_list)
 
 
 def main():
     """Основная логика работы бота."""
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time()) - RETRY_TIME
+    current_response = ''
+    prev_response = ''
+    if not check_tokens():
+        log_message = 'Нет необходимых токенов!'
+        logger.critical(log_message)
+        raise SystemExit(log_message)
     while True:
         try:
-            if not check_tokens():
-                log_message = 'Нет необходимых токенов!'
-                logger.critical(log_message)
-                raise SystemExit(log_message)
             response = get_api_answer(current_timestamp)
+            logger.error
             homework = check_response(response)
+            logger.error
+            if homework is None:
+                message = 'Список домашек пуст'
+                send_message(bot, message)
+                logger.error
+            current_response = homework[0]
             message = parse_status(homework[0])
+            logger.error
             send_message(bot, message)
+            logger.error
             current_timestamp = response.get('current_date', current_timestamp)
             time.sleep(RETRY_TIME)
         except Exception as error:
-            log_message = f'Сбой в работе программы: {error}'
-            logger.error(log_message)
+            logger.error(f'Сбой в работе программы: {error}')
             send_message(bot, f'{log_message} {error}')
-            time.sleep(RETRY_TIME)
-        else:
+        finally:
             time.sleep(RETRY_TIME)
 
 
