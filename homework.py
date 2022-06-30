@@ -12,6 +12,15 @@ import exceptions
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename='main.log',
+    filemode='w',
+    format='%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(lineno)s'
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -51,6 +60,8 @@ def get_api_answer(current_timestamp):
         params = {'from_date': timestamp}
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         logger.debug('Выполняем запрос к API')
+        if response.status_code != HTTPStatus.OK:
+            raise ConnectionError
     except Exception as error:
         if response.status_code != HTTPStatus.OK:
             raise ConnectionError(
@@ -77,14 +88,14 @@ def check_response(response):
     if not isinstance(homework, list):
         raise TypeError('Ошибка формата вывода домашек')
     if not homework:
-        return
+        return None
     else:
         return homework
 
 
 def parse_status(homework):
     """Извлекает статус домашней работы."""
-    homework_name = homework.get('homework_name')
+    homework_name = homework['homework_name']
     if homework_name is None:
         raise exceptions.StatusKeyError('Не найден ключ homework_name')
     homework_status = homework.get('status')
@@ -106,14 +117,14 @@ def check_tokens():
 
 def main():
     """Основная логика работы бота."""
-    bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time()) - RETRY_TIME
-    current_response = ''
-    prev_response = ''
     if not check_tokens():
         log_message = 'Нет необходимых токенов!'
         logger.critical(log_message)
         raise SystemExit(log_message)
+    bot = telegram.Bot(token=TELEGRAM_TOKEN)
+    current_timestamp = int(time.time()) - RETRY_TIME
+    current_response = ''
+    prev_response = ''
     while True:
         try:
             response = get_api_answer(current_timestamp)
@@ -124,11 +135,13 @@ def main():
                 message = 'Список домашек пуст'
                 send_message(bot, message)
                 logger.error
-            current_response = homework[0]
-            message = parse_status(homework[0])
-            logger.error
-            send_message(bot, message)
-            logger.error
+            current_response = homework.get('current_date')
+            if current_response != prev_response:
+                prev_response = current_response
+                message = parse_status(homework[0])
+                logger.error
+                send_message(bot, message)
+                logger.error
             current_timestamp = response.get('current_date', current_timestamp)
             time.sleep(RETRY_TIME)
         except Exception as error:
@@ -139,15 +152,5 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        level=logging.DEBUG,
-        encoding='utf-8',
-        filename='main.log',
-        filemode='w',
-        format='%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(lineno)s'
-    )
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler(sys.stdout)
-    logger.addHandler(handler)
+
     main()
