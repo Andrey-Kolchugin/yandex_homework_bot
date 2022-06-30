@@ -14,6 +14,7 @@ load_dotenv()
 
 logging.basicConfig(
     level=logging.DEBUG,
+    encoding='utf-8',
     filename='main.log',
     filemode='w',
     format='%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(lineno)s'
@@ -55,19 +56,15 @@ def send_message(bot, message):
 
 def get_api_answer(current_timestamp):
     """Делает запрос к домашке и получает api ответю."""
-    try:
-        timestamp = current_timestamp or int(time.time())
-        params = {'from_date': timestamp}
-        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        logger.debug('Выполняем запрос к API')
-        if response.status_code != HTTPStatus.OK:
-            raise ConnectionError
-    except Exception as error:
-        if response.status_code != HTTPStatus.OK:
-            raise ConnectionError(
-                f'Ошибка коннекта к эндпоинту {ENDPOINT}'
-                f'загововок={HEADERS} params={params}'
-            ) from error
+    timestamp = current_timestamp or int(time.time())
+    params = {'from_date': timestamp}
+    response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+    logger.debug('Выполняем запрос к API')
+    if response.status_code != HTTPStatus.OK:
+        raise ConnectionError(
+            f'Ошибка коннекта к эндпоинту {ENDPOINT}'
+            f'загововок={HEADERS} params={params}'
+        )
     if isinstance(response, dict):
         raise TypeError('Ошибка ответа, тип объекта !=dict')
     else:
@@ -81,7 +78,7 @@ def check_response(response):
         homework = response['homeworks']
     except KeyError as error:
         raise KeyError('В ответе отсутствует ключ homeworks') from error
-    if response.get('current_date') is None:
+    if response['current_date'] is None:
         raise KeyError('В ответе отсутствует ключ current_date')
     if len(homework) == 0:
         raise exceptions.EmptyWorkListError('Задания на ревью не отправлялись')
@@ -95,9 +92,7 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлекает статус домашней работы."""
-    homework_name = homework['homework_name']
-    if homework_name is None:
-        raise exceptions.StatusKeyError('Не найден ключ homework_name')
+    homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
     if homework_status is None:
         raise exceptions.StatusKeyError('Не найден ключ status')
@@ -135,7 +130,7 @@ def main():
                 message = 'Список домашек пуст'
                 send_message(bot, message)
                 logger.error
-            current_response = homework.get('current_date')
+            current_response = homework
             if current_response != prev_response:
                 prev_response = current_response
                 message = parse_status(homework[0])
@@ -143,14 +138,13 @@ def main():
                 send_message(bot, message)
                 logger.error
             current_timestamp = response.get('current_date', current_timestamp)
-            time.sleep(RETRY_TIME)
         except Exception as error:
             logger.error(f'Сбой в работе программы: {error}')
             send_message(bot, f'{log_message} {error}')
+            time.sleep(RETRY_TIME)
         finally:
             time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
-
     main()
