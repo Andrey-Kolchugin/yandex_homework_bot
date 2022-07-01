@@ -14,7 +14,8 @@ load_dotenv()
 
 logging.basicConfig(
     level=logging.DEBUG,
-    encoding='utf-8',
+    # использовать параметр только с версией питон 3.9+
+    # encoding='utf-8',
     filename='main.log',
     filemode='w',
     format='%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(lineno)s'
@@ -45,7 +46,6 @@ def send_message(bot, message):
     try:
         bot = Bot(token=TELEGRAM_TOKEN)
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.debug('Попытка отправить сообщение')
     except Exception as error:
         raise exceptions.SendMessageError(
             'Не удалось отправить сообщение'
@@ -67,21 +67,23 @@ def get_api_answer(current_timestamp):
         )
     if isinstance(response, dict):
         raise TypeError('Ошибка ответа, тип объекта !=dict')
-    else:
+    try:
         return response.json()
+    except Exception as err:
+        raise('Не удалось преробразовать в JSON') from err
 
 
 def check_response(response):
     """Проверяет ответ API на корректность."""
-    logger.debug('Начинаем прверку ответа на соответствие API')
+    logger.debug('Начинаем проверку ответа на соответствие API')
+    if not isinstance(response, dict):
+        raise TypeError('Формат ответа API некорректный!')
+    if ('homeworks' and 'current_date') not in response:
+        raise KeyError('Ключей homeworks или current_date нет в ответе')
     try:
         homework = response['homeworks']
     except KeyError as error:
         raise KeyError('В ответе отсутствует ключ homeworks') from error
-    if response['current_date'] is None:
-        raise KeyError('В ответе отсутствует ключ current_date')
-    if len(homework) == 0:
-        raise exceptions.EmptyWorkListError('Задания на ревью не отправлялись')
     if not isinstance(homework, list):
         raise TypeError('Ошибка формата вывода домашек')
     if not homework:
@@ -96,7 +98,9 @@ def parse_status(homework):
     homework_status = homework.get('status')
     if homework_status is None:
         raise exceptions.StatusKeyError('Не найден ключ status')
-    verdict = HOMEWORK_STATUSES[homework_status]
+    if HOMEWORK_STATUSES.get(homework_status) is None:
+        raise KeyError('Получен неизвестный статус работы')
+    verdict = HOMEWORK_STATUSES.get(homework_status)
     if verdict is None:
         raise exceptions.StatusKeyError(
             'Отсутствует сообщение о статусе проверки'
@@ -106,8 +110,7 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    token_list = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
-    return all(token_list)
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def main():
@@ -115,33 +118,29 @@ def main():
     if not check_tokens():
         log_message = 'Нет необходимых токенов!'
         logger.critical(log_message)
-        raise SystemExit(log_message)
+        sys.exit(log_message)
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time()) - RETRY_TIME
+    current_timestamp = int(time.time())
     current_response = ''
     prev_response = ''
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            logger.error
             homework = check_response(response)
-            logger.error
             if homework is None:
-                message = 'Список домашек пуст'
+                message = 'Список домашек пуст!'
                 send_message(bot, message)
-                logger.error
             current_response = homework
             if current_response != prev_response:
                 prev_response = current_response
                 message = parse_status(homework[0])
-                logger.error
                 send_message(bot, message)
-                logger.error
+            else:
+                logger.debug('Нет новых статусов')
             current_timestamp = response.get('current_date', current_timestamp)
         except Exception as error:
             logger.error(f'Сбой в работе программы: {error}')
             send_message(bot, f'{log_message} {error}')
-            time.sleep(RETRY_TIME)
         finally:
             time.sleep(RETRY_TIME)
 
