@@ -14,8 +14,7 @@ load_dotenv()
 
 logging.basicConfig(
     level=logging.DEBUG,
-    # использовать параметр только с версией питон 3.9+
-    # encoding='utf-8',
+    encoding='utf-8',
     filename='main.log',
     filemode='w',
     format='%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(lineno)s'
@@ -78,7 +77,7 @@ def check_response(response):
     logger.debug('Начинаем проверку ответа на соответствие API')
     if not isinstance(response, dict):
         raise TypeError('Формат ответа API некорректный!')
-    if ('homeworks' and 'current_date') not in response:
+    if ('homeworks' or 'current_date') not in response:
         raise KeyError('Ключей homeworks или current_date нет в ответе')
     try:
         homework = response['homeworks']
@@ -86,8 +85,6 @@ def check_response(response):
         raise KeyError('В ответе отсутствует ключ homeworks') from error
     if not isinstance(homework, list):
         raise TypeError('Ошибка формата вывода домашек')
-    if not homework:
-        return None
     else:
         return homework
 
