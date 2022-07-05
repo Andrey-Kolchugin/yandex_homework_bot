@@ -77,16 +77,17 @@ def check_response(response):
     logger.debug('Начинаем проверку ответа на соответствие API')
     if not isinstance(response, dict):
         raise TypeError('Формат ответа API некорректный!')
-    if ('homeworks' or 'current_date') not in response:
-        raise KeyError('Ключей homeworks или current_date нет в ответе')
+    if response.get('homeworks') is None:
+        raise KeyError('Ключа homeworks нет в ответе')
+    if response.get('current_date') is None:
+        raise KeyError('Ключa current_date нет в ответе')
     try:
         homework = response['homeworks']
     except KeyError as error:
         raise KeyError('В ответе отсутствует ключ homeworks') from error
     if not isinstance(homework, list):
         raise TypeError('Ошибка формата вывода домашек')
-    else:
-        return homework
+    return homework
 
 
 def parse_status(homework):
