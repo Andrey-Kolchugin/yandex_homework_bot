@@ -14,7 +14,7 @@ load_dotenv()
 
 logging.basicConfig(
     level=logging.DEBUG,
-    encoding='utf-8',
+    # encoding='utf-8',
     filename='main.log',
     filemode='w',
     format='%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(lineno)s'
@@ -64,12 +64,10 @@ def get_api_answer(current_timestamp):
             f'Ошибка коннекта к эндпоинту {ENDPOINT}'
             f'загововок={HEADERS} params={params}'
         )
-    if isinstance(response, dict):
-        raise TypeError('Ошибка ответа, тип объекта !=dict')
     try:
         return response.json()
     except Exception as err:
-        raise('Не удалось преробразовать в JSON') from err
+        raise TypeError('Не удалось преробразовать в JSON') from err
 
 
 def check_response(response):
